@@ -15,7 +15,26 @@ from keras.layers import Embedding, Bidirectional, LSTM, Dense, Dropout
 
 
 
-df=pd.read_csv('data\hepatitis_csv.csv')
+from kaggle.api.kaggle_api_extended import KaggleApi
+
+def download_dataset():
+    # Initialize Kaggle API client and authenticate using secrets
+    api = KaggleApi()
+    api.set_config_value('username', st.secrets["kaggle"]["username"])
+    api.set_config_value('key', st.secrets["kaggle"]["key"])
+    api.authenticate()
+    
+    # Define the dataset and the path where files will be downloaded
+    dataset = 'codebreaker619/hepatitis-data'
+    path = '.'
+
+    # Download the dataset
+    api.dataset_download_files(dataset, path=path, unzip=True)
+
+if st.sidebar.button('Get Data', type="primary"):
+    download_dataset()
+
+df=pd.read_csv('hepatitis_csv.csv')
 
 df = df.copy()
 

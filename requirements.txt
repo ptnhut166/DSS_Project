@@ -6,3 +6,4 @@ imbalanced-learn
 scikit-learn
 keras
 tensorflow
+kaggle
