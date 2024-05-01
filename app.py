@@ -13,28 +13,38 @@ from sklearn.model_selection import train_test_split
 from keras.models import Sequential
 from keras.layers import Embedding, Bidirectional, LSTM, Dense, Dropout
 
+from connection import KaggleDatasetConnection
 
 
-from kaggle.api.kaggle_api_extended import KaggleApi
+st.subheader("Loading dataset from Kaggle Through API")
+conn = st.experimental_connection("kaggle_datasets", type=KaggleDatasetConnection)
+dataset_path = st.text_input(
+    "Kaggle Link Of Dataset", "codebreaker619/hepatitis-data"
+)
+file_list = ""
+if dataset_path.count("/") == 1:
+    owner, dataset = dataset_path.split("/")
+    try:
+        file_list = conn.list(path=dataset_path, ttl=3600)
+        st.json(file_list)
+    except Exception as e:
+        st.error(f"Oops...{e.__class__}")
+if file_list:
+    dataset_name = st.text_input(
+        "Kaggle Dataset Name", file_list[0]
+    ).replace("\"","")
+    if dataset_name:
+        if st.button("Load Data"):
+            try:
+                df = conn.get(path=dataset_path, filename=dataset_name, ttl=3600)
+                st.write(f"{dataset_name} preview")
+                st.dataframe(df.head(20))
+            except Exception as e:
+                st.error(f"Oops...{e.__class__}")
 
-def download_dataset():
-    # Initialize Kaggle API client and authenticate using secrets
-    api = KaggleApi()
-    api.set_config_value('username', st.secrets["kaggle"]["username"])
-    api.set_config_value('key', st.secrets["kaggle"]["key"])
-    api.authenticate()
-    
-    # Define the dataset and the path where files will be downloaded
-    dataset = 'codebreaker619/hepatitis-data'
-    path = '.'
 
-    # Download the dataset
-    api.dataset_download_files(dataset, path=path, unzip=True)
 
-if st.sidebar.button('Get Data', type="primary"):
-    download_dataset()
 
-df=pd.read_csv('hepatitis_csv.csv')
 
 df = df.copy()
 
