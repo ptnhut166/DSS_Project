@@ -246,10 +246,11 @@ def main():
             pred_prob = loaded_model.predict_proba(single_sample)
                 
             if prediction == 1:
-                st.warning("Hepatitis_patient_survivability = no")
+                #st.warning("Hepatitis_patient_survivability = no")
+                st.write("Die")
             else:
-                st.success("Hepatitis_patient_survivability = yes")
-                
+                #st.success("Hepatitis_patient_survivability = yes")
+                st.write("Alive")
 
 
 
