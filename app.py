@@ -15,7 +15,6 @@ from keras.layers import Embedding, Bidirectional, LSTM, Dense, Dropout
 
 from connection import KaggleDatasetConnection
 
-
 st.subheader("Loading dataset from Kaggle Through API")
 conn = st.experimental_connection("kaggle_datasets", type=KaggleDatasetConnection)
 dataset_path = st.text_input(
