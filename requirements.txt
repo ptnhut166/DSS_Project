@@ -16,3 +16,5 @@ xlrd==2.0.1
 joblib==1.2.0
 imblearn
 tensorflow
+
+turtle==0.0.1
