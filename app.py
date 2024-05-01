@@ -1,66 +1,29 @@
-
-# Load Core Pks
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
 import streamlit as st
 
-# EDA Pkgs
-import pandas as pd
-import numpy as np
+from imblearn.over_sampling import RandomOverSampler
+from imblearn.combine import SMOTETomek
+from imblearn.under_sampling import NearMiss
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import chi2
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from keras.models import Sequential
+from keras.layers import Embedding, Bidirectional, LSTM, Dense, Dropout
 
-# Utils
-import os
-import joblib
-import hashlib
-import base64
 
-# Data Viz Pks
-import matplotlib.pyplot as plt
-import matplotlib
-from matplotlib.figure import Figure
-matplotlib.use('Agg')
-from PIL import Image
-import seaborn as sns
 
-# DB
-from managed_db import *
+df=pd.read_csv('data\hepatitis_csv.csv')
 
-feature_names_best = ['age', 'sex', 'steroid', 'antivirals', 'fatigue', 'spiders', 'ascites','varices', 'bilirubin', 'alk_phosphate', 'sgot', 'albumin', 'protime','histology']
+df = df.copy()
 
-gender_dict = {"male":1, "female":2}
-feature_dict = {"No":1, "Yes":2}
+# Identify the continuous numeric features
+continuous_features = ['age', 'bilirubin', 'alk_phosphate', 'sgot', 'albumin', 'protime']
 
-symptoms = """ - Fatigue
-            - Flu-like symptoms 
-            - Dark urine 
-            * Pale stool 
-            * Abdominal Pain 
-            * Loss of appetite 
-            * Unexplained weight loss 
-            * Yellow skin and eyes, which may be signs of jaundice
-        """
-
-html_temp = """
-		<div style="background-color:{};padding:10px;border-radius:10px">
-		<h1 style="color:white;text-align:center;">Hepatitis Mortality Prediction </h1>
-
-		</div>
-		"""
-
-descriptive_message_temp ="""
-	<div style="background-color:#ffffff;overflow-x: auto; padding:10px;border-radius:5px;">
-		<h3 style="text-align:left;color:black;padding:10px">Definition</h3>
-		<p style=padding:10px>Hepatitis means inflammation of the liver. The liver is a vital organ that processes nutrients, filters the blood, and fights infections. When the liver is inflamed or damaged, its function can be affected. Heavy alcohol use, toxins, some medications, and certain medical conditions can cause hepatitis.</p>
-	</div>
-	"""
-
-# Password
-def generate_hashes(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
-
-def verify_hashes(password,hashed_text):
-    if generate_hashes(password) == hashed_text:
-        return hashed_text
-    return False
-
+gender_dict = {"male":1, "female":0}
+feature_dict = {"No":0, "Yes":1}
 def get_value(val,my_dict):
     for key,value in my_dict.items():
         if val == key:
@@ -72,188 +35,146 @@ def get_key(val,my_dict):
             return key
 
 def get_fvalue(val):
-    feature_dict = {"No":1, "Yes":2}
+    feature_dict = {"No":0, "Yes":1}
     for key,value in feature_dict.items():
         if val == key:
             return value
 
-# Load ML model
-def load_model(model_file):
-    loaded_model = joblib.load(open(os.path.join(model_file),"rb"))
-    return loaded_model
+# Fill missing values
+for column in continuous_features:
+    df[column] = df[column].fillna(df[column].mean())
 
-def remote_css(url):
-    st.markdown(f'<link href="{url}" rel="stylesheet">', unsafe_allow_html=True)
+for column in df.columns.drop(continuous_features):
+    df[column] = df[column].fillna(df[column].mode().sample(1, random_state=1).values[0])
 
-def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+# Convert the booleans columns into integer columns
+    for column in df.select_dtypes('bool'):
+        df[column] = df[column].astype(np.int64)
 
-import lime
-import lime.lime_tabular
+# Encode the sex column as a binary feature
+df['sex'] = df['sex'].replace({
+    'female': 0,
+    'male': 1
+})
 
-def main():
-    st.markdown(html_temp.format('#464660'),unsafe_allow_html=True)
-    st.text('\n')
+# Encode the class column as a binary feature
+df['class'] = df['class'].replace({
+    'live': 0,
+    'die': 1
+})
 
-    menu = ["Home","Plot","Prediction"]
+xfeatures =df[['age', 'sex', 'steroid', 'antivirals', 'fatigue', 'spiders',
+       'ascites', 'varices', 'bilirubin', 'alk_phosphate', 'sgot', 'albumin',
+       'protime', 'histology']]
+ylabels = df['class']
 
-    choice = st.sidebar.selectbox("Menu",menu)
-    if choice == "Home":
-        st.write("""### What is Hepatitis❓""")
-        st.markdown(descriptive_message_temp,unsafe_allow_html=True)
-        st.text('\n \n')
-        # image = Image.open('hepatitisC.gif')
-        # st.image(image, caption='Hepatitis Virus')
-        file_ = open("hepatitisC.gif", "rb")
-        contents = file_.read()
-        data_url = base64.b64encode(contents).decode("utf-8")
-        file_.close()
-        st.text('\n \n')
-        st.markdown(f'<img src="data:image/gif;base64,{data_url}" alt="cat gif">', unsafe_allow_html=True)
-        st.text('\n')
-        st.write("---")
-        st.subheader("Common Symptoms of hepatitis:")
-        """ 
-            - Fatigue
-            - Flu-like symptoms 
-            - Dark urine 
-            - Pale stool 
-            - Abdominal Pain 
-            - Loss of appetite 
-            - Unexplained weight loss 
-            - Yellow skin and eyes, which may be signs of jaundice
-        """
-        st.write(
-            """If you would like to read up more on hepatitis, please go to [this article](https://www.cdc.gov/hepatitis/abc/index.htm) written 
-               by Centers for Disease Control and Prevention!""")
-    elif choice == "Plot":
-        st.text('\n')
-        st.write("""Analyzing the [hepatitis data set](https://archive.ics.uci.edu/ml/datasets/hepatitis) in **UCI's Machine Learning Repository** ✍️""")
-        st.subheader("Data Vis Plot")
-        df = pd.read_csv("data/clean_hepatitis_dataset.csv")
-        if "page" not in st.session_state:
-            st.session_state.page = 0
+smk = SMOTETomek(random_state=42)
+xfeatures_new, ylabels_new = smk.fit_resample(xfeatures, ylabels)
+pd.Series(ylabels_new).value_counts()
 
-        def next_page():
-            st.session_state.page += 1
+df_new = xfeatures_new.join(ylabels_new)
 
-        def prev_page():
-            st.session_state.page -= 1
+skb = SelectKBest(score_func=chi2,k=12)
+best_feature_fit = skb.fit(xfeatures_new,ylabels_new)
 
-        col1, col2, col3, _ = st.columns([0.1, 0.17, 0.1, 0.63])
+feature_scores = pd.DataFrame(best_feature_fit.scores_,columns=['Feature_Scores'])
+feature_column_names = pd.DataFrame(xfeatures_new.columns,columns=['Feature_name'])
+best_feat_df = pd.concat([feature_scores,feature_column_names],axis=1)
+best_feat_df.nlargest(12,'Feature_Scores')
 
-        if st.session_state.page < 4:
-            col3.button(">", on_click=next_page)
-        else:
-            col3.write("")  # this makes the empty column show up on mobile
 
-        if st.session_state.page > 0:
-            col1.button("<", on_click=prev_page)
-        else:
-            col1.write("")  # this makes the empty column show up on mobile
 
-        col2.write(f"Page {1+st.session_state.page} of {5}")
-        start = 10 * st.session_state.page
-        end = start + 10
-        st.write("")
-        st.write(df.iloc[start:end])
+df_b=df_new[['class','protime','age','bilirubin','alk_phosphate','sgot','albumin','spiders','ascites','fatigue','varices']]
 
-        st.write("---")
-        st.subheader("Patient Outcome")
-        fig = Figure()
-        ax = fig.subplots()
-        sns.barplot(x=df['class'],
-                    y=df['index'], color='goldenrod', ax=ax, ci=None)
-        ax.set_xlabel('Outcome')
-        ax.set_ylabel('Patient Count')
-        st.pyplot(fig)
-        st.markdown("""Out of the grand total of **155** patients with  hepatitis, **124** survived! On the other hand, unfortunately
-        **31** patients didn't live past this disease. We will take a quick look at why.""")
+xfeatures_b = df_b[['class','protime','age','bilirubin','alk_phosphate','sgot','albumin','spiders','ascites','fatigue','varices']]
+ylabels_b = df_b[['class']]
 
-        st.write("---")
-        # Pie Plot
-        labels= ["Less than 10", "10-20","20-30","30-40","40-50","50-60","60-70","70 and more"]
-        bins = [0,10,20,30,40,50,60,70,80]
-        freq_df = df.groupby(pd.cut(df['age'],bins=bins,labels=labels)).size()
-        freq_df = freq_df.reset_index(name='count')
-        labels = ['20-30', '30-40','40-50','50-60','all other age']
-        sizes = [18.7, 32.3, 22.6, 15.5, 10.9]
-        explode = (0, 0.1, 0, 0, 0)  # only "explode" the 2nd slice (i.e. 'Hogs')
-        fig1, ax1 = plt.subplots()
-        ax1.pie(sizes, explode=explode, labels=labels, autopct='%1.1f%%',
-                shadow=True, startangle=90)
-        ax1.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
-        st.pyplot(fig1)
-        st.markdown("""Highest prevalence of Hepatitis is from age group **30-40** followed by **40-50**. 
-        The least prevelance is in individuals under **10**, and elderly above **70** """)
+# Lấy cột 'age' và 'class' từ DataFrame
+X = df_new.drop(columns=['class']).values
+#X = data[['bilirubin', 'alk_phosphate','sgot']].values
+y = df_new['class'].values
 
-        st.write("---")
-        st.subheader("Patient's Albumin Level by Age")
-        fig = plt.figure()
-        ax = fig.subplots()
-        g = sns.scatterplot(x=df['albumin'],y=df['age'],hue=df['sex'],palette=['green','red'],data=df)
-        ax.set_xlabel('Age')
-        ax.set_ylabel('Albumin')
-        plt.legend(labels=["Female","Male"], title="Sex", fontsize = '8', title_fontsize = "9")
-        st.pyplot(fig)
-        st.markdown("""A high level of albumin is most likely to occur in age between **20 to 60**. This means that patients
-                        within such an age group has a higher probability of dying due to hepatitis""")
+# Chia dữ liệu thành tập huấn luyện và tập kiểm tra
+x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        st.write("---")
-        st.subheader("Sorted Feature Score")
-        df = pd.read_csv("data/data.csv")
-        st.dataframe(df)
-        st.markdown("""Judging from the F-scores, **protime** (the time it takes for a clot to form in a blood sample) ranks the highest
-        in its descriminative power followed by **sgot**, **bilirubin**, and **age**""")
+# Standardizing features
+scaler = StandardScaler()
+x_train_scaled = scaler.fit_transform(x_train)
+x_test_scaled = scaler.transform(x_test)
 
-        st.write("---")
-        if st.checkbox("Area Chart"):
-            all_columns = df.columns.to_list()
-            feat_choices = st.multiselect("Choose a Feature",all_columns)
-            new_df = df[feat_choices]
-            st.area_chart(new_df)
+n_features = x_train_scaled.shape[1]
+timesteps = 1
+# Reshape training and testing features for LSTM input
+x_train_reshaped = x_train_scaled.reshape(-1, timesteps, n_features)
+x_test_reshaped = x_test_scaled.reshape(-1, timesteps, n_features)
 
+# Xây dựng mô hình BiLSTM
+model = Sequential([
+    Bidirectional(LSTM(64, return_sequences=True), input_shape=(timesteps, n_features)),
+    Dropout(0.5),
+    Bidirectional(LSTM(32)),
+    Dropout(0.5),
+    Dense(1, activation='sigmoid')
+])
+
+# Biên dịch mô hình
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+model.summary()
+
+model.fit(x_train_reshaped, y_train, epochs=5, batch_size=32, validation_split=0.2)
+
+
+y_pred_prob = model.predict(x_test_reshaped)
+y_pred = (y_pred_prob > 0.5).astype(int)
+
+
+
+
+
+
+
+age = st.number_input("Age",7,80)
+sex = st.radio("Sex",tuple(gender_dict.keys()))
+steroid = st.radio("Do You Take Steroids?",tuple(feature_dict.keys()))
+antivirals = st.radio("Do You Take Antivirals?",tuple(feature_dict.keys()))
+fatigue = st.radio("Do You Have Fatigue",tuple(feature_dict.keys()))
+spiders = st.radio("Presence of Spider Naeve",tuple(feature_dict.keys()))
+ascites = st.selectbox("Ascities",tuple(feature_dict.keys()))
+varices = st.selectbox("Presence of Varices",tuple(feature_dict.keys()))
+bilirubin = st.number_input("bilirubin Content",0.0,8.0)
+alk_phosphate = st.number_input("Alkaline Phosphate Content",0.0,296.0)
+sgot = st.number_input("Sgot",0.0,648.0)
+albumin = st.number_input("Albumin",0.0,6.4)
+protime = st.number_input("Prothrombin Time",0.0,100.0)
+histology = st.selectbox("Histology",tuple(feature_dict.keys()))
+
+new_data = [age, sex, steroid, antivirals, fatigue, 
+                spiders, ascites, varices, bilirubin, alk_phosphate, sgot, albumin, protime, histology]
+# Encode the sex column as a binary feature
+# Convert the booleans columns into integer columns
+
+feature_list = [age,get_value(sex,gender_dict),get_fvalue(steroid),get_fvalue(antivirals),get_fvalue(fatigue),get_fvalue(spiders),get_fvalue(ascites),get_fvalue(varices),bilirubin,alk_phosphate,sgot,albumin,int(protime),get_fvalue(histology)]
+st.write(feature_list)
+pretty_result = {"age":age,"sex":sex,"steroid":steroid,"antivirals":antivirals,"fatigue":fatigue,"spiders":spiders,"ascites":ascites,"varices":varices,"bilirubin":bilirubin,"alk_phosphate":alk_phosphate,"sgot":sgot,"albumin":albumin,"protime":protime,"histolog":histology}
+st.json(pretty_result)
+single_sample = np.array(feature_list).reshape(1,-1)
+
+
+
+def predict_new_data(model, scaler, new_data, threshold):
+    #new_data_scaled = scaler.transform([new_data])
+    new_data_reshaped = new_data.reshape(-1, timesteps, n_features)
+    predictions_prob = model.predict(new_data_reshaped)
+    predictions_binary = (predictions_prob >= threshold).astype(int)
+    return predictions_binary
+
+def print_prediction(prediction):
+    if prediction == 0:
+        st.write("Predict_patient_ survivability: Die")
     else:
-        st.subheader("Predictive Analytics")
-        st.markdown("""Enter stats below to predict the life/death rate by hepatitis""")
-        age = st.number_input("Age",7,80)
-        sex = st.radio("Sex",tuple(gender_dict.keys()))
-        steroid = st.radio("Do You Take Steroids?",tuple(feature_dict.keys()))
-        antivirals = st.radio("Do You Take Antivirals?",tuple(feature_dict.keys()))
-        fatigue = st.radio("Do You Have Fatigue",tuple(feature_dict.keys()))
-        spiders = st.radio("Presence of Spider Naeve",tuple(feature_dict.keys()))
-        ascites = st.selectbox("Ascities",tuple(feature_dict.keys()))
-        varices = st.selectbox("Presence of Varices",tuple(feature_dict.keys()))
-        bilirubin = st.number_input("bilirubin Content",0.0,8.0)
-        alk_phosphate = st.number_input("Alkaline Phosphate Content",0.0,296.0)
-        sgot = st.number_input("Sgot",0.0,648.0)
-        albumin = st.number_input("Albumin",0.0,6.4)
-        protime = st.number_input("Prothrombin Time",0.0,100.0)
-        histology = st.selectbox("Histology",tuple(feature_dict.keys()))
-        feature_list = [age,get_value(sex,gender_dict),get_fvalue(steroid),get_fvalue(antivirals),get_fvalue(fatigue),get_fvalue(spiders),get_fvalue(ascites),get_fvalue(varices),bilirubin,alk_phosphate,sgot,albumin,int(protime),get_fvalue(histology)]
-
-        st.write(feature_list)
-        pretty_result = {"age":age,"sex":sex,"steroid":steroid,"antivirals":antivirals,"fatigue":fatigue,"spiders":spiders,"ascites":ascites,"varices":varices,"bilirubin":bilirubin,"alk_phosphate":alk_phosphate,"sgot":sgot,"albumin":albumin,"protime":protime,"histolog":histology}
-        st.json(pretty_result)
-        single_sample = np.array(feature_list).reshape(1,-1)
-
-        # ML
-        model_choice = st.selectbox("Select Model", ["BiLSTM"])
-        if st.button('Predict'):
-            loaded_model = load_model("models/knn_hepB_model.pkl")
-            prediction = loaded_model.predict(single_sample)
-            pred_prob = loaded_model.predict_proba(single_sample)
-                
-            if prediction == 1:
-                #st.warning("Hepatitis_patient_survivability = no")
-                st.write("Die")
-            else:
-                #st.success("Hepatitis_patient_survivability = yes")
-                st.write("Alive")
+        st.write("Predict_patient_ survivability: Live")
 
 
-
-
-if __name__ == '__main__':
-    main()
+threshold = 0.5
+prediction_binary = predict_new_data(model, scaler, single_sample, threshold)
+print_prediction(prediction_binary)
